@@ -183,7 +183,9 @@ mem_init(void)
 	//      (ie. perm = PTE_U | PTE_P)
 	//    - pages itself -- kernel RW, user NONE
 	// Your code goes here:
-
+	boot_map_region(kern_pgdir, UPAGES, npages * sizeof(struct PageInfo), 
+		PADDR(pages), PTE_U | PTE_P);
+	boot_map_region(kern_pgdir, KERNBASE, npages * PGSIZE, 0, PTE_W | PTE_P);
 	//////////////////////////////////////////////////////////////////////
 	// Use the physical memory that 'bootstack' refers to as the kernel
 	// stack.  The kernel stack grows down from virtual address KSTACKTOP.
@@ -195,7 +197,8 @@ mem_init(void)
 	//       overwrite memory.  Known as a "guard page".
 	//     Permissions: kernel RW, user NONE
 	// Your code goes here:
-
+	boot_map_region(kern_pgdir, KSTACKTOP - KSTKSIZE, KSTKSIZE, PADDR(bootstack),
+		PTE_W | PTE_P);
 	//////////////////////////////////////////////////////////////////////
 	// Map all of physical memory at KERNBASE.
 	// Ie.  the VA range [KERNBASE, 2^32) should map to
@@ -203,12 +206,12 @@ mem_init(void)
 	// We might not have 2^32 - KERNBASE bytes of physical memory, but
 	// we just set up the mapping anyway.
 	// Permissions: kernel RW, user NONE
-	// Your code goes here:
-
+	// Your code goes here::
+	boot_map_region(kern_pgdir, KERNBASE, (1 << 28), 0, PTE_W | PTE_P);
 	// Check that the initial page directory has been set up correctly.
 	check_kern_pgdir();
 
-	// Switch from the minimal entry page directory to the full kern_pgdir
+	// Switch from the mi:CS FIND G KSTnimal entry page directory to the full kern_pgdir
 	// page table we just created.	Our instruction pointer should be
 	// somewhere between KERNBASE and KERNBASE+4MB right now, which is
 	// mapped the same way by both page tables.
@@ -360,7 +363,7 @@ pgdir_walk(pde_t *pgdir, const void *va, int create)
 		if (!pi)
 			return NULL;
 		physaddr_t pa = page2pa(pi);
-		*pddir = (pa | PTE_P | PTE_U);
+		*pddir = (pa | PTE_P | PTE_U | PTE_W);
 		pi->pp_ref++;
 	    }
 	}
@@ -384,9 +387,12 @@ boot_map_region(pde_t *pgdir, uintptr_t va, size_t size, physaddr_t pa, int perm
 {
 	// Fill this function in
 	int i = 0;
-	for (; i < (uint32_t)(size / PGSIZE); i++) {
-	    pte_t *pte = pgdir_walk(pgdir, (char *)va + i * PGSIZE, 0);
-	    *pte = (*pte & (pa + i * PGSIZE)) | (perm | PTE_P);
+	if (!size)
+	    return;
+
+	for (; i < (uint32_t)(((size - 1) / PGSIZE) + 1); i++) {
+	    pte_t *pte = pgdir_walk(pgdir, (char *)va + i * PGSIZE, 1);
+	    *pte = (pa + i * PGSIZE) | (perm | PTE_P);
 	}
 }
 
