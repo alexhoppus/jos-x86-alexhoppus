@@ -26,6 +26,8 @@ i386_init(void)
 
 	cprintf("6828 decimal is %o octal!\n", 6828);
 
+	// Test the stack backtrace function (lab 1 only)
+	
 	// Lab 2 memory management initialization functions
 	mem_init();
 
