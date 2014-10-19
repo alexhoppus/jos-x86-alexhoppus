@@ -13,7 +13,7 @@
 #include <kern/trap.h>
 
 #define CMDBUF_SIZE	80	// enough for one VGA text line
-
+char fname_buffer[150] = {0};
 
 struct Command {
 	const char *name;
@@ -25,6 +25,7 @@ struct Command {
 static struct Command commands[] = {
 	{ "help", "Display this list of commands", mon_help },
 	{ "kerninfo", "Display information about the kernel", mon_kerninfo },
+	{ "backtrace", "Display current backtrace", mon_backtrace }
 };
 #define NCOMMANDS (sizeof(commands)/sizeof(commands[0]))
 
@@ -60,6 +61,27 @@ int
 mon_backtrace(int argc, char **argv, struct Trapframe *tf)
 {
 	// Your code here.
+	cprintf("Stack backtrace:\n");
+	uint32_t ebp_val = read_ebp();
+	while (ebp_val) {
+		struct Eipdebuginfo info;
+		uint32_t eip_val = *((int *)ebp_val + 1);
+		uint32_t arg1 = *((int *)ebp_val + 2);
+		uint32_t arg2 = *((int *)ebp_val + 3);
+		uint32_t arg3 = *((int *)ebp_val + 4);
+		uint32_t arg4 = *((int *)ebp_val + 5);
+		uint32_t arg5 = *((int *)ebp_val + 6);
+		debuginfo_eip(eip_val, &info);
+		cprintf("  ebp %08x  eip %08x  args %08x %08x %08x %08x %08x\n", 
+			ebp_val, eip_val, arg1, arg2, arg3, arg4, arg5);
+		ebp_val = *((int *)ebp_val);
+		
+		memcpy(fname_buffer, info.eip_fn_name, info.eip_fn_namelen);
+		fname_buffer[info.eip_fn_namelen] = '\0';
+		cprintf("       %s:%d %s+%x\n", info.eip_file, info.eip_line,
+			fname_buffer, info.offset);
+	}
+	
 	return 0;
 }
 
