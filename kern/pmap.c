@@ -163,7 +163,7 @@ mem_init(void)
 	//////////////////////////////////////////////////////////////////////
 	// Make 'envs' point to an array of size 'NENV' of 'struct Env'.
 	// LAB 3: Your code here.
-
+	envs = boot_alloc(NENV * sizeof(struct Env));
 	//////////////////////////////////////////////////////////////////////
 	// Now that we've allocated the initial kernel data structures, we set
 	// up the list of free physical pages. Once we've done so, all further
@@ -190,10 +190,14 @@ mem_init(void)
 	// Your code goes here:
 	boot_map_region(kern_pgdir, UPAGES, npages * sizeof(struct PageInfo), 
 		PADDR(pages), PTE_U | PTE_P);
+	boot_map_region(kern_pgdir, UENVS, NENV * sizeof(struct Env), 
+		PADDR(envs), PTE_U | PTE_P);
+
+
 	boot_map_region(kern_pgdir, KERNBASE, npages * PGSIZE, 0, PTE_W | PTE_P);
 	//////////////////////////////////////////////////////////////////////
 	// Map the 'envs' array read-only by the user at linear address UENVS
-	// (ie. perm = PTE_U | PTE_P).
+	// (ie. perm = PTE_U | PTE_P).y
 	// Permissions:
 	//    - the new image at UENVS  -- kernel R, user R
 	//    - envs itself -- kernel RW, user NONE
@@ -284,6 +288,7 @@ page_init(void)
 	char *next_free = boot_alloc(0);
 	uint32_t pages_occupied = ((uint32_t)(next_free) - KERNBASE) / PGSIZE;
 	cprintf("pages occupied %d\n", pages_occupied);
+	cprintf("Npages %d\n", npages);
 	for (i = 0; i < npages; i++) {
 		pages[i].pp_ref = 0;
 		if (i != 0 && !(i >= io_page && i <= (pages_occupied))) {
@@ -541,7 +546,24 @@ int
 user_mem_check(struct Env *env, const void *va, size_t len, int perm)
 {
 	// LAB 3: Your code here.
+	uint32_t f_page = ((uint32_t) va) / PGSIZE;
+	uint32_t l_page = ((uint32_t) va + len) / PGSIZE;
+	uint32_t i = f_page * PGSIZE;
+	if ((uint32_t)(va + len) > ULIM) {
+		user_mem_check_addr = (uintptr_t) va;
+		return -E_FAULT;
+	}
 
+	for (; i <= l_page * PGSIZE; i += PGSIZE) {
+		pte_t *pte = pgdir_walk(env->env_pgdir, (const void *) i, 0);
+		if (!pte || !((*pte | perm | PTE_P) == *pte)) {
+			if (i == f_page * PGSIZE)
+				user_mem_check_addr = (uintptr_t) va;
+			else
+				user_mem_check_addr = (uintptr_t) i;
+			return -E_FAULT;
+		}
+	} 
 	return 0;
 }
 

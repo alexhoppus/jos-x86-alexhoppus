@@ -58,6 +58,13 @@ static const char *trapname(int trapno)
 	return "(unknown trap)";
 }
 
+void HANDLER_SYSCALL();
+void HANDLER_DIVIDE();
+void HANDLER_SEGNP();
+void HANDLER_GPFLT();
+void HANDLER_PGFLT();
+void HANDLER_BRKPT();
+
 
 void
 trap_init(void)
@@ -65,6 +72,20 @@ trap_init(void)
 	extern struct Segdesc gdt[];
 
 	// LAB 3: Your code here.
+	struct Gatedesc desc;
+	SETGATE(desc, 0, GD_KT, (void *)HANDLER_SYSCALL, 3);
+	idt[T_SYSCALL] = desc;
+	SETGATE(desc, 0, GD_KT, (void *)HANDLER_DIVIDE, 3);
+	idt[T_DIVIDE] = desc;
+        SETGATE(desc, 0, GD_KT, (void *)HANDLER_SEGNP, 3);
+	idt[T_SEGNP] = desc;
+	SETGATE(desc, 0, GD_KT, (void *)HANDLER_GPFLT, 3);
+	idt[T_GPFLT] = desc;
+        SETGATE(desc, 0, GD_KT, (void *)HANDLER_PGFLT, 0);
+        idt[T_PGFLT] = desc;
+        SETGATE(desc, 0, GD_KT, (void *)HANDLER_BRKPT, 3);
+        idt[T_BRKPT] = desc;
+
 
 	// Per-CPU setup 
 	trap_init_percpu();
@@ -141,8 +162,23 @@ print_regs(struct PushRegs *regs)
 static void
 trap_dispatch(struct Trapframe *tf)
 {
+	uint32_t ret; 
 	// Handle processor exceptions.
 	// LAB 3: Your code here.
+        switch(tf->tf_trapno){
+                case T_PGFLT:
+        		page_fault_handler(tf);                
+                        break;
+		case T_BRKPT:
+			monitor(tf);
+			break;
+		case T_SYSCALL:
+			ret = syscall(tf->tf_regs.reg_eax, tf->tf_regs.reg_edx,
+				tf->tf_regs.reg_ecx, tf->tf_regs.reg_ebx,
+				tf->tf_regs.reg_edi, tf->tf_regs.reg_esi);
+			tf->tf_regs.reg_eax = ret;
+			return;
+        }
 
 	// Unexpected trap: The user process or the kernel has a bug.
 	print_trapframe(tf);
@@ -165,9 +201,8 @@ trap(struct Trapframe *tf)
 	// fails, DO NOT be tempted to fix it by inserting a "cli" in
 	// the interrupt path.
 	assert(!(read_eflags() & FL_IF));
-
-	cprintf("Incoming TRAP frame at %p\n", tf);
-
+	
+	cprintf("Incoming TRAP frame at %p %d\n", tf, tf->tf_trapno);
 	if ((tf->tf_cs & 3) == 3) {
 		// Trapped from user mode.
 		assert(curenv);
@@ -197,16 +232,18 @@ void
 page_fault_handler(struct Trapframe *tf)
 {
 	uint32_t fault_va;
-
+	
 	// Read processor's CR2 register to find the faulting address
 	fault_va = rcr2();
 
 	// Handle kernel-mode page faults.
-
+	
 	// LAB 3: Your code here.
-
 	// We've already handled kernel-mode exceptions, so if we get here,
 	// the page fault happened in user mode.
+	if (!((tf->tf_cs & 3) == 3)) {
+		panic("Page fault in kernel\n");
+	}
 
 	// Destroy the environment that caused the fault.
 	cprintf("[%08x] user fault va %08x ip %08x\n",
