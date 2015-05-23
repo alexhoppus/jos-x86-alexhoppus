@@ -65,6 +65,13 @@ static const char *trapname(int trapno)
 	return "(unknown trap)";
 }
 
+void HANDLER_SYSCALL();
+void HANDLER_DIVIDE();
+void HANDLER_SEGNP();
+void HANDLER_GPFLT();
+void HANDLER_PGFLT();
+void HANDLER_BRKPT();
+
 
 void
 trap_init(void)
@@ -72,6 +79,20 @@ trap_init(void)
 	extern struct Segdesc gdt[];
 
 	// LAB 3: Your code here.
+	struct Gatedesc desc;
+	SETGATE(desc, 0, GD_KT, (void *)HANDLER_SYSCALL, 3);
+	idt[T_SYSCALL] = desc;
+	SETGATE(desc, 0, GD_KT, (void *)HANDLER_DIVIDE, 3);
+	idt[T_DIVIDE] = desc;
+        SETGATE(desc, 0, GD_KT, (void *)HANDLER_SEGNP, 3);
+	idt[T_SEGNP] = desc;
+	SETGATE(desc, 0, GD_KT, (void *)HANDLER_GPFLT, 3);
+	idt[T_GPFLT] = desc;
+        SETGATE(desc, 0, GD_KT, (void *)HANDLER_PGFLT, 0);
+        idt[T_PGFLT] = desc;
+        SETGATE(desc, 0, GD_KT, (void *)HANDLER_BRKPT, 3);
+        idt[T_BRKPT] = desc;
+
 
 	// Per-CPU setup 
 	trap_init_percpu();
@@ -125,7 +146,7 @@ trap_init_percpu(void)
 void
 print_trapframe(struct Trapframe *tf)
 {
-	cprintf("TRAP frame at %p from CPU %d\n", tf, cpunum());
+	cprintf("TRAP frame at %p\n", tf);
 	print_regs(&tf->tf_regs);
 	cprintf("  es   0x----%04x\n", tf->tf_es);
 	cprintf("  ds   0x----%04x\n", tf->tf_ds);
@@ -171,8 +192,23 @@ print_regs(struct PushRegs *regs)
 static void
 trap_dispatch(struct Trapframe *tf)
 {
+	uint32_t ret; 
 	// Handle processor exceptions.
 	// LAB 3: Your code here.
+        switch(tf->tf_trapno){
+                case T_PGFLT:
+        		page_fault_handler(tf);                
+                        break;
+		case T_BRKPT:
+			monitor(tf);
+			break;
+		case T_SYSCALL:
+			ret = syscall(tf->tf_regs.reg_eax, tf->tf_regs.reg_edx,
+				tf->tf_regs.reg_ecx, tf->tf_regs.reg_ebx,
+				tf->tf_regs.reg_edi, tf->tf_regs.reg_esi);
+			tf->tf_regs.reg_eax = ret;
+			return;
+        }
 
 	// Handle spurious interrupts
 	// The hardware sometimes raises these because of noise on the
@@ -218,6 +254,8 @@ trap(struct Trapframe *tf)
 	// the interrupt path.
 	assert(!(read_eflags() & FL_IF));
 
+	cprintf("Incoming TRAP frame at %p\n", tf);
+
 	if ((tf->tf_cs & 3) == 3) {
 		// Trapped from user mode.
 		// Acquire the big kernel lock before doing any
@@ -261,16 +299,19 @@ void
 page_fault_handler(struct Trapframe *tf)
 {
 	uint32_t fault_va;
-
+	
 	// Read processor's CR2 register to find the faulting address
 	fault_va = rcr2();
 
 	// Handle kernel-mode page faults.
-
+	
 	// LAB 3: Your code here.
 
 	// We've already handled kernel-mode exceptions, so if we get here,
 	// the page fault happened in user mode.
+	if (!((tf->tf_cs & 3) == 3)) {
+		panic("Page fault in kernel\n");
+	}
 
 	// Call the environment's page fault upcall, if one exists.  Set up a
 	// page fault stack frame on the user exception stack (below

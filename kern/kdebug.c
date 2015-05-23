@@ -116,7 +116,7 @@ debuginfo_eip(uintptr_t addr, struct Eipdebuginfo *info)
 	const struct Stab *stabs, *stab_end;
 	const char *stabstr, *stabstr_end;
 	int lfile, rfile, lfun, rfun, lline, rline;
-
+	int func_found = 0;
 	// Initialize *info
 	info->eip_file = "<unknown>";
 	info->eip_line = 0;
@@ -124,7 +124,7 @@ debuginfo_eip(uintptr_t addr, struct Eipdebuginfo *info)
 	info->eip_fn_namelen = 9;
 	info->eip_fn_addr = addr;
 	info->eip_fn_narg = 0;
-
+	info->offset = 0;
 	// Find the relevant set of stabs
 	if (addr >= ULIM) {
 		stabs = __STAB_BEGIN__;
@@ -184,6 +184,7 @@ debuginfo_eip(uintptr_t addr, struct Eipdebuginfo *info)
 		// Search within the function definition for the line number.
 		lline = lfun;
 		rline = rfun;
+		func_found = 1;
 	} else {
 		// Couldn't find function stab!  Maybe we're in an assembly
 		// file.  Search the whole file for the line number.
@@ -194,7 +195,6 @@ debuginfo_eip(uintptr_t addr, struct Eipdebuginfo *info)
 	// Ignore stuff after the colon.
 	info->eip_fn_namelen = strfind(info->eip_fn_name, ':') - info->eip_fn_name;
 
-
 	// Search within [lline, rline] for the line number stab.
 	// If found, set info->eip_line to the right line number.
 	// If not found, return -1.
@@ -203,9 +203,13 @@ debuginfo_eip(uintptr_t addr, struct Eipdebuginfo *info)
 	//	There's a particular stabs type used for line numbers.
 	//	Look at the STABS documentation and <inc/stab.h> to find
 	//	which one.
-	// Your code here.
-
-
+	// Your code here
+	
+	stab_binsearch(stabs, &lline, &rline, N_SLINE, addr);
+	info->eip_line = stabs[lline].n_desc;
+	if (func_found)
+		info->offset = stabs[lline].n_value;
+	
 	// Search backwards from the line number for the relevant filename
 	// stab.
 	// We can't just use the "lfile" stab because inlined functions
