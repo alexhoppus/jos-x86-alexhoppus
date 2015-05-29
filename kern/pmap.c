@@ -174,10 +174,9 @@ mem_init(void)
 	// memory management will go through the page_* functions. In
 	// particular, we can now map memory using boot_map_region
 	// or page_insert
-	cprintf("npages basemem %d npages extmem %d\n", npages_basemem, npages_extmem);
 	
 	page_init();
-
+	
 	check_page_free_list(1);
 	check_page_alloc();
 	check_page();
@@ -218,8 +217,8 @@ mem_init(void)
 	//       overwrite memory.  Known as a "guard page".
 	//     Permissions: kernel RW, user NONE
 	// Your code goes here:
-	boot_map_region(kern_pgdir, KSTACKTOP - KSTKSIZE, KSTKSIZE, PADDR(bootstack),
-		PTE_W | PTE_P);
+	//boot_map_region(kern_pgdir, KSTACKTOP - KSTKSIZE, KSTKSIZE, PADDR(bootstack),
+	//	PTE_W | PTE_P);
 	//////////////////////////////////////////////////////////////////////
 	// Map all of physical memory at KERNBASE.
 	// Ie.  the VA range [KERNBASE, 2^32) should map to
@@ -283,7 +282,14 @@ mem_init_mp(void)
 	//     Permissions: kernel RW, user NONE
 	//
 	// LAB 4: Your code here:
-
+	int i = 0;
+	for (; i < NCPU; i++) {
+		uintptr_t kstackbot = KSTACKTOP - i * (KSTKSIZE + KSTKGAP) -
+			KSTKSIZE;
+		boot_map_region(kern_pgdir, kstackbot,
+			KSTKSIZE, PADDR(percpu_kstacks[i]), PTE_W | PTE_P);
+	}
+	memcpy(percpu_kstacks, bootstack - PGSIZE, PGSIZE);
 }
 
 // --------------------------------------------------------------
@@ -331,7 +337,8 @@ page_init(void)
 	cprintf("Npages %d\n", npages);
 	for (i = 0; i < npages; i++) {
 		pages[i].pp_ref = 0;
-		if (i != 0 && !(i >= io_page && i <= (pages_occupied))) {
+		if (i != 0 && !(i >= io_page && i <= (pages_occupied)) &&
+			(i != (MPENTRY_PADDR >> PGSHIFT))) {
 			pages[i].pp_link = page_free_list;
 			page_free_list = &pages[i];
 		}
@@ -567,6 +574,9 @@ tlb_invalidate(pde_t *pgdir, void *va)
 // location.  Return the base of the reserved region.  size does *not*
 // have to be multiple of PGSIZE.
 //
+
+static uintptr_t cur_mmio_lim = MMIOBASE;
+
 void *
 mmio_map_region(physaddr_t pa, size_t size)
 {
@@ -574,7 +584,7 @@ mmio_map_region(physaddr_t pa, size_t size)
 	// beginning of the MMIO region.  Because this is static, its
 	// value will be preserved between calls to mmio_map_region
 	// (just like nextfree in boot_alloc).
-	static uintptr_t base = MMIOBASE;
+	//static uintptr_t base = MMIOBASE;
 
 	// Reserve size bytes of virtual memory starting at base and
 	// map physical pages [pa,pa+size) to virtual addresses
@@ -594,7 +604,14 @@ mmio_map_region(physaddr_t pa, size_t size)
 	// Hint: The staff solution uses boot_map_region.
 	//
 	// Your code here:
-	panic("mmio_map_region not implemented");
+	uintptr_t cur_mmio = cur_mmio_lim;
+	if (cur_mmio >= MMIOLIM) {
+		panic("MMIOLIM has been reached\n");
+	}
+
+	boot_map_region(kern_pgdir, cur_mmio_lim, size, pa, PTE_W|PTE_PCD|PTE_PWT);
+	cur_mmio_lim += size;
+	return (void *)cur_mmio;
 }
 
 static uintptr_t user_mem_check_addr;
@@ -713,6 +730,9 @@ check_page_free_list(bool only_low_memory)
 		assert(page2pa(pp) != EXTPHYSMEM);
 		assert(page2pa(pp) < EXTPHYSMEM || (char *) page2kva(pp) >= first_free_page);
 
+		// (new test for lab 4)
+		assert(page2pa(pp) != MPENTRY_PADDR);
+
 		if (page2pa(pp) < EXTPHYSMEM)
 			++nfree_basemem;
 		else
@@ -808,7 +828,6 @@ check_page_alloc(void)
 // This function doesn't test every corner case,
 // but it is a pretty good sanity check.
 //
-
 static void
 check_kern_pgdir(void)
 {
@@ -832,9 +851,15 @@ check_kern_pgdir(void)
 		assert(check_va2pa(pgdir, KERNBASE + i) == i);
 
 	// check kernel stack
-	for (i = 0; i < KSTKSIZE; i += PGSIZE)
-		assert(check_va2pa(pgdir, KSTACKTOP - KSTKSIZE + i) == PADDR(bootstack) + i);
-	assert(check_va2pa(pgdir, KSTACKTOP - PTSIZE) == ~0);
+	// (updated in lab 4 to check per-CPU kernel stacks)
+	for (n = 0; n < NCPU; n++) {
+		uint32_t base = KSTACKTOP - (KSTKSIZE + KSTKGAP) * (n + 1);
+		for (i = 0; i < KSTKSIZE; i += PGSIZE)
+			assert(check_va2pa(pgdir, base + KSTKGAP + i)
+				== PADDR(percpu_kstacks[n]) + i);
+		for (i = 0; i < KSTKGAP; i += PGSIZE)
+			assert(check_va2pa(pgdir, base + i) == ~0);
+	}
 
 	// check PDE permissions
 	for (i = 0; i < NPDENTRIES; i++) {
@@ -843,6 +868,7 @@ check_kern_pgdir(void)
 		case PDX(KSTACKTOP-1):
 		case PDX(UPAGES):
 		case PDX(UENVS):
+		case PDX(MMIOBASE):
 			assert(pgdir[i] & PTE_P);
 			break;
 		default:
@@ -856,6 +882,8 @@ check_kern_pgdir(void)
 	}
 	cprintf("check_kern_pgdir() succeeded!\n");
 }
+
+
 
 // This function returns the physical address of the page containing 'va',
 // defined by the page directory 'pgdir'.  The hardware normally performs
