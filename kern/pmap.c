@@ -205,7 +205,8 @@ mem_init(void)
 	//    - the new image at UENVS  -- kernel R, user R
 	//    - envs itself -- kernel RW, user NONE
 	// LAB 3: Your code here.
-
+	boot_map_region(kern_pgdir, UENVS, NENV * sizeof(struct Env), 
+               PADDR(envs), PTE_U | PTE_P);
 	//////////////////////////////////////////////////////////////////////
 	// Use the physical memory that 'bootstack' refers to as the kernel
 	// stack.  The kernel stack grows down from virtual address KSTACKTOP.
@@ -289,7 +290,7 @@ mem_init_mp(void)
 		boot_map_region(kern_pgdir, kstackbot,
 			KSTKSIZE, PADDR(percpu_kstacks[i]), PTE_W | PTE_P);
 	}
-	memcpy(percpu_kstacks, bootstack - PGSIZE, PGSIZE);
+	memcpy(percpu_kstacks[cpunum()], bootstack, KSTKSIZE);
 }
 
 // --------------------------------------------------------------
@@ -608,7 +609,7 @@ mmio_map_region(physaddr_t pa, size_t size)
 	if (cur_mmio >= MMIOLIM) {
 		panic("MMIOLIM has been reached\n");
 	}
-
+	cprintf("MMIO map at %p size %d\n", cur_mmio_lim, (int)size);
 	boot_map_region(kern_pgdir, cur_mmio_lim, size, pa, PTE_W|PTE_PCD|PTE_PWT);
 	cur_mmio_lim += size;
 	return (void *)cur_mmio;
@@ -868,7 +869,6 @@ check_kern_pgdir(void)
 		case PDX(KSTACKTOP-1):
 		case PDX(UPAGES):
 		case PDX(UENVS):
-		case PDX(MMIOBASE):
 			assert(pgdir[i] & PTE_P);
 			break;
 		default:

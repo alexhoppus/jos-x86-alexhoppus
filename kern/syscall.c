@@ -271,7 +271,6 @@ syscall(uint32_t syscallno, uint32_t a1, uint32_t a2, uint32_t a3, uint32_t a4, 
 	// Call the function corresponding to the 'syscallno' parameter.
 	// Return any appropriate return value.
 	// LAB 3: Your code here.
-	cprintf("SYS_cputs: %d\n", SYS_cputs);
 	switch(syscallno) {
 		case SYS_cputs:
 			user_mem_assert(curenv, (const void *) a1, (size_t) a2, 0);
@@ -285,6 +284,8 @@ syscall(uint32_t syscallno, uint32_t a1, uint32_t a2, uint32_t a3, uint32_t a4, 
 			return ret;
 		case SYS_env_destroy:
 			ret = sys_env_destroy(a1);
+		case SYS_yield:
+			sys_yield();	
 		default:
 			panic("syscall not implemented sno %d", syscallno);
 			return -E_INVAL;

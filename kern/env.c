@@ -368,19 +368,15 @@ load_icode(struct Env *e, uint8_t *binary, size_t size)
 	eph = ph + elf->e_phnum;
 	for (; ph < eph; ph++) {
 		if (ph->p_type == ELF_PROG_LOAD) {
-			cprintf("allocating region at %x of size %d\n", ph->p_va, ph->p_memsz);
 			region_alloc(e, (void *)ph->p_va, ph->p_memsz);
-			cprintf("copying data from %x of size %d\n", binary + ph->p_offset, ph->p_filesz);
 			memcpy((void *)ph->p_va, binary + ph->p_offset, ph->p_filesz);
 		}
 	}
 	// Now map one page for the program's initial stack
 
 	// at virtual address USTACKTOP - PGSIZE.
-	cprintf("Allocating stack at %x\n", USTACKTOP);
 	// LAB 3: Your code here.
 	region_alloc(e, (void *) (USTACKTOP - PGSIZE), PGSIZE);
-	cprintf("PC will be set to %x\n", elf->e_entry);
 	e->env_tf.tf_eip = elf->e_entry;
 }
 
@@ -533,7 +529,6 @@ env_run(struct Env *e)
 	//	e->env_tf to sensible values.
 
 	// LAB 3: Your code here.
-	cprintf("Running env\n");
 	if (curenv) {
 		if (curenv->env_status == ENV_RUNNING)
 			curenv->env_status = ENV_RUNNABLE;
@@ -545,9 +540,8 @@ env_run(struct Env *e)
 	curenv = e;
 	curenv->env_status = ENV_RUNNING;
 	curenv->env_runs++;
-	cprintf("Loading CR3\n");
 	lcr3(PADDR(curenv->env_pgdir));
-	cprintf("popping registers\n");
+	unlock_kernel();
 	env_pop_tf(&e->env_tf);
 }
 
