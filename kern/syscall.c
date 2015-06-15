@@ -167,10 +167,26 @@ sys_page_alloc(envid_t envid, void *va, int perm)
 	// LAB 4: Your code here.
 	int ret = 0;
 	struct Env *e;
+	struct PageInfo *p;
 	ret = envid2env(envid, &e, 1);
 	if (ret)
 		return -E_BAD_ENV;
-	panic("sys_page_alloc not implemented");
+	if (va >= (void *) UTOP || (int) va % PGSIZE)
+		return -E_INVAL;
+		
+	if ((perm & (PTE_U | PTE_P)) != (PTE_U | PTE_P))
+		return -E_INVAL;
+	
+	if ((perm | PTE_SYSCALL) != PTE_SYSCALL)
+		return -E_INVAL;
+	
+	p = page_alloc(ALLOC_ZERO);
+	if (!p)
+		return -E_NO_MEM;
+	
+	if (page_insert(e->env_pgdir, p, va, perm))
+		return -E_NO_MEM;
+	return 0;
 }
 
 // Map the page of memory at 'srcva' in srcenvid's address space
@@ -201,7 +217,41 @@ sys_page_map(envid_t srcenvid, void *srcva,
 	//   check the current permissions on the page.
 
 	// LAB 4: Your code here.
-	panic("sys_page_map not implemented");
+	int ret = 0;
+	struct Env *src_e, *dst_e;
+	struct PageInfo *src_p;
+	pte_t *src_ptep, *dst_ptep;
+	ret = envid2env(srcenvid, &src_e, 1);
+	if (ret)
+		return -E_BAD_ENV;
+	ret = envid2env(dstenvid, &dst_e, 1);
+	if (ret)
+		return -E_BAD_ENV;
+
+	if (srcva >= (void *) UTOP || (int) srcva % PGSIZE)
+		return -E_INVAL;
+
+	if (dstva >= (void *) UTOP || (int) dstva % PGSIZE)
+		return -E_INVAL;
+	
+	if ((perm & (PTE_U | PTE_P)) != (PTE_U | PTE_P))
+		return -E_INVAL;
+	
+	if ((perm | PTE_SYSCALL) != PTE_SYSCALL)
+		return -E_INVAL;
+
+	src_ptep = pgdir_walk(src_e->env_pgdir, srcva, 0);
+	if (!src_ptep)
+		return -E_INVAL;
+	
+	if ((perm & PTE_W) && (!(*src_ptep & PTE_W)))
+		return -E_INVAL;
+	
+	dst_ptep = pgdir_walk(dst_e->env_pgdir, dstva, 1);
+	if (!dst_ptep)
+		return -E_NO_MEM;
+	*dst_ptep = PTE_ADDR(*src_ptep) | perm;
+	return 0;
 }
 
 // Unmap the page of memory at 'va' in the address space of 'envid'.
@@ -311,6 +361,12 @@ syscall(uint32_t syscallno, uint32_t a1, uint32_t a2, uint32_t a3, uint32_t a4, 
 			ret = sys_exofork();
 			return ret;
 		case SYS_env_set_status:
+			ret = sys_env_set_status((envid_t) a1, (int) a2);
+		case SYS_page_alloc:
+			ret = sys_page_alloc((envid_t) a1, (void *) a2, (int) a3);
+		case SYS_page_map:
+			ret = sys_page_map((envid_t) a1, (void *) a2, (envid_t) a3,
+				(void *) a4, (int) a5);
 		default:
 			panic("syscall not implemented sno %d", syscallno);
 			return -E_INVAL;
