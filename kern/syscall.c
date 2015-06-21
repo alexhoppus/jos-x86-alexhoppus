@@ -92,6 +92,7 @@ sys_exofork(void)
 	e->env_status = ENV_NOT_RUNNABLE;
 	e->env_tf = curenv->env_tf;
 	e->env_tf.tf_regs.reg_eax = 0;
+	cprintf("Setting ip to %lx\n", curenv->env_tf.tf_eip);
 	return e->env_id;
 }
 
@@ -117,7 +118,7 @@ sys_env_set_status(envid_t envid, int status)
 	ret = envid2env(envid, &e, 1); 
 	if (ret)
 		return -E_BAD_ENV;
-	if (status != ENV_RUNNABLE || status != ENV_NOT_RUNNABLE)
+	if (status != ENV_RUNNABLE && status != ENV_NOT_RUNNABLE)
 		return -E_INVAL;
 	e->env_status = status;
 	return 0;
@@ -184,8 +185,10 @@ sys_page_alloc(envid_t envid, void *va, int perm)
 	if (!p)
 		return -E_NO_MEM;
 	
-	if (page_insert(e->env_pgdir, p, va, perm))
+	if (page_insert(e->env_pgdir, p, va, perm)) {
+		page_free(p);
 		return -E_NO_MEM;
+	}
 	return 0;
 }
 
@@ -240,17 +243,17 @@ sys_page_map(envid_t srcenvid, void *srcva,
 	if ((perm | PTE_SYSCALL) != PTE_SYSCALL)
 		return -E_INVAL;
 
-	src_ptep = pgdir_walk(src_e->env_pgdir, srcva, 0);
-	if (!src_ptep)
+	src_p = page_lookup(src_e->env_pgdir, srcva, &src_ptep);
+
+	if (!src_p)
 		return -E_INVAL;
 	
 	if ((perm & PTE_W) && (!(*src_ptep & PTE_W)))
 		return -E_INVAL;
 	
-	dst_ptep = pgdir_walk(dst_e->env_pgdir, dstva, 1);
-	if (!dst_ptep)
+	if (page_insert(dst_e->env_pgdir, src_p, dstva, perm))
 		return -E_NO_MEM;
-	*dst_ptep = PTE_ADDR(*src_ptep) | perm;
+
 	return 0;
 }
 
@@ -267,7 +270,17 @@ sys_page_unmap(envid_t envid, void *va)
 	// Hint: This function is a wrapper around page_remove().
 
 	// LAB 4: Your code here.
-	panic("sys_page_unmap not implemented");
+	int ret = 0;
+	struct Env *e;
+	ret = envid2env(envid, &e, 1);
+        if (ret)
+		return -E_BAD_ENV;
+
+        if (va >= (void *) UTOP || (int) va % PGSIZE)
+                return -E_INVAL;
+
+	page_remove(e->env_pgdir, va);
+	return 0;
 }
 
 // Try to send 'value' to the target env 'envid'.
@@ -346,31 +359,39 @@ syscall(uint32_t syscallno, uint32_t a1, uint32_t a2, uint32_t a3, uint32_t a4, 
 		case SYS_cputs:
 			user_mem_assert(curenv, (const void *) a1, (size_t) a2, 0);
 			sys_cputs((const char *)a1,(size_t) a2);
-			return 0;
+			break;
 		case SYS_cgetc:
 			ret = sys_cgetc();
-			return ret;
+			break;
 		case SYS_getenvid:
 			ret = sys_getenvid();
-			return ret;
+			break;
 		case SYS_env_destroy:
 			ret = sys_env_destroy(a1);
+			break;
 		case SYS_yield:
 			sys_yield();
+			break;
 		case SYS_exofork:
 			ret = sys_exofork();
-			return ret;
+			break;
 		case SYS_env_set_status:
 			ret = sys_env_set_status((envid_t) a1, (int) a2);
+			break;
 		case SYS_page_alloc:
 			ret = sys_page_alloc((envid_t) a1, (void *) a2, (int) a3);
+			break;
 		case SYS_page_map:
 			ret = sys_page_map((envid_t) a1, (void *) a2, (envid_t) a3,
 				(void *) a4, (int) a5);
+			break;
+		case SYS_page_unmap:
+			ret = sys_page_unmap((envid_t) a1, (void *) a2);
+			break;
 		default:
 			panic("syscall not implemented sno %d", syscallno);
 			return -E_INVAL;
 	}
-	return 0;
+	return ret;
 }
 
