@@ -13,7 +13,7 @@
 #include <kern/picirq.h>
 #include <kern/cpu.h>
 #include <kern/spinlock.h>
-
+#include <inc/string.h>
 
 /* For debugging, so print_trapframe can distinguish between printing
  * a saved trapframe and printing the current trapframe and print some
@@ -298,7 +298,7 @@ void
 page_fault_handler(struct Trapframe *tf)
 {
 	uint32_t fault_va;
-	
+	struct UTrapframe utf;
 	// Read processor's CR2 register to find the faulting address
 	fault_va = rcr2();
 
@@ -341,11 +341,31 @@ page_fault_handler(struct Trapframe *tf)
 	//   (the 'tf' variable points at 'curenv->env_tf').
 
 	// LAB 4: Your code here.
-
+	unsigned long uxstack_top = 0;
 	// Destroy the environment that caused the fault.
-	cprintf("[%08x] user fault va %08x ip %08x\n",
-		curenv->env_id, fault_va, tf->tf_eip);
-	print_trapframe(tf);
-	env_destroy(curenv);
+	if (!curenv->env_pgfault_upcall) {
+		cprintf("[%08x] user fault va %08x ip %08x\n",
+			curenv->env_id, fault_va, tf->tf_eip);
+		print_trapframe(tf);
+		env_destroy(curenv);
+	}
+	if (tf->tf_esp > UXSTACKTOP - PGSIZE && tf->tf_esp < UXSTACKTOP - 1) {
+		/* Recusive call */
+		uxstack_top = tf->tf_esp - sizeof(unsigned long);
+	} else {
+		uxstack_top = UXSTACKTOP;
+	}
+	utf.utf_fault_va = fault_va;
+	utf.utf_regs = tf->tf_regs;
+	utf.utf_eip = tf->tf_eip;
+	utf.utf_eflags = tf->tf_eflags;
+	utf.utf_esp = tf->tf_esp;
+	utf.utf_err = tf->tf_err;
+	/* Check if this page available */
+	memcpy((void *) (uxstack_top - sizeof(struct UTrapframe) - 1),
+		&utf, sizeof(struct UTrapframe));
+	tf->tf_eip = (uintptr_t) curenv->env_pgfault_upcall;
+	tf->tf_esp = uxstack_top - sizeof(struct UTrapframe) - 1;
+	env_run(curenv);
 }
 

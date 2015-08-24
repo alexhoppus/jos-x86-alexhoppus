@@ -246,7 +246,7 @@ run-%-nox-gdb: prep-% pre-qemu
 	$(QEMU) -nographic $(QEMUOPTS) -S
 
 run-%-gdb: prep-% pre-qemu
-	$(QEMU) $(QEMUOPTS)
+	$(QEMU) $(QEMUOPTS) -S
 
 run-%-nox: prep-% pre-qemu
 	$(QEMU) -nographic $(QEMUOPTS)
