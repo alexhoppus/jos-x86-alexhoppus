@@ -145,7 +145,7 @@ trap_init_percpu(void)
 void
 print_trapframe(struct Trapframe *tf)
 {
-	cprintf("TRAP frame at %p\n", tf);
+	cprintf("TRAP frame at %p from CPU %d\n", tf, thiscpu);
 	print_regs(&tf->tf_regs);
 	cprintf("  es   0x----%04x\n", tf->tf_es);
 	cprintf("  ds   0x----%04x\n", tf->tf_ds);
@@ -355,6 +355,8 @@ page_fault_handler(struct Trapframe *tf)
 	} else {
 		uxstack_top = UXSTACKTOP;
 	}
+	// Check the exception stack is mapped
+
 	utf.utf_fault_va = fault_va;
 	utf.utf_regs = tf->tf_regs;
 	utf.utf_eip = tf->tf_eip;
@@ -362,6 +364,8 @@ page_fault_handler(struct Trapframe *tf)
 	utf.utf_esp = tf->tf_esp;
 	utf.utf_err = tf->tf_err;
 	/* Check if this page available */
+	user_mem_assert(curenv, (void *) (uxstack_top - sizeof(struct UTrapframe) - 1),
+		 sizeof(struct UTrapframe), PTE_W);
 	memcpy((void *) (uxstack_top - sizeof(struct UTrapframe) - 1),
 		&utf, sizeof(struct UTrapframe));
 	tf->tf_eip = (uintptr_t) curenv->env_pgfault_upcall;

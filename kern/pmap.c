@@ -636,28 +636,22 @@ static uintptr_t user_mem_check_addr;
 // Returns 0 if the user program can access this range of addresses,
 // and -E_FAULT otherwise.
 //
-int
-user_mem_check(struct Env *env, const void *va, size_t len, int perm)
-{
-	// LAB 3: Your code here.
-	uint32_t f_page = ((uint32_t) va) / PGSIZE;
-	uint32_t l_page = ((uint32_t) va + len) / PGSIZE;
-	uint32_t i = f_page * PGSIZE;
-	if ((uint32_t)(va + len) > ULIM) {
-		user_mem_check_addr = (uintptr_t) va;
-		return -E_FAULT;
-	}
 
-	for (; i <= l_page * PGSIZE; i += PGSIZE) {
+int user_mem_check(struct Env *env, const void *va, size_t len, int perm)
+{
+	unsigned long i = (unsigned long) va;
+        if ((uint32_t)(va + len) > ULIM) {
+                user_mem_check_addr = (uintptr_t) va;
+                return -E_FAULT;
+        }
+
+	for (; i < (unsigned long)va + len; i += PGSIZE) {
 		pte_t *pte = pgdir_walk(env->env_pgdir, (const void *) i, 0);
 		if (!pte || !((*pte | perm | PTE_P) == *pte)) {
-			if (i == f_page * PGSIZE)
-				user_mem_check_addr = (uintptr_t) va;
-			else
-				user_mem_check_addr = (uintptr_t) i;
-			return -E_FAULT;
-		}
-	} 
+ 			user_mem_check_addr = (uintptr_t) i;
+ 			return -E_FAULT;
+ 		}
+	}
 	return 0;
 }
 
