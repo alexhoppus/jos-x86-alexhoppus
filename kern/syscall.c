@@ -92,7 +92,7 @@ sys_exofork(void)
 	e->env_status = ENV_NOT_RUNNABLE;
 	e->env_tf = curenv->env_tf;
 	e->env_tf.tf_regs.reg_eax = 0;
-	cprintf("Setting ip to %lx\n", curenv->env_tf.tf_eip);
+	e->env_pgfault_upcall = curenv->env_pgfault_upcall;
 	return e->env_id;
 }
 

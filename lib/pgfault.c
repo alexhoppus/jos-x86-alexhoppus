@@ -34,7 +34,6 @@ set_pgfault_handler(void (*handler)(struct UTrapframe *utf))
 		if ((r = sys_env_set_pgfault_upcall(0, _pgfault_upcall)) < 0) {
 			panic("sys_env_set_pgfault_upcall: %e", r);
 		}
-		cprintf("_pgfault_upcall %p\n", _pgfault_upcall);
 	}
 	
 	// Save handler pointer for assembly to call.
