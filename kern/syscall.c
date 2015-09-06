@@ -331,7 +331,43 @@ static int
 sys_ipc_try_send(envid_t envid, uint32_t value, void *srcva, unsigned perm)
 {
 	// LAB 4: Your code here.
-	panic("sys_ipc_try_send not implemented");
+	int ret = 0;
+        struct Env *e, *src_e;
+	pte_t *src_ptep;
+	struct PageInfo *src_p;
+        ret = envid2env(envid, &e, 1);
+        if (ret)
+                return -E_BAD_ENV;
+        ret = envid2env(0, &src_env, 1);
+        if (ret)
+                return -E_BAD_ENV;
+
+	if (!e->env_ipc_recving)
+		return -E_IPC_NOT_RECV;
+
+	if ((srcva < UTOP) && (srcva % PGSIZE))
+		return -E_INVAL;
+	
+	if ((perm & (PTE_U | PTE_P)) != (PTE_U | PTE_P))
+                return -E_INVAL;
+        
+        if ((perm | PTE_SYSCALL) != PTE_SYSCALL)
+                return -E_INVAL;
+
+	if (srcva < UTOP) {
+        	src_p = page_lookup(src_e->env_pgdir, srcva, &src_ptep);
+        	if (!src_p)
+                	return -E_INVAL;
+        
+        	if ((perm & PTE_W) && (!(*src_ptep & PTE_W)))
+                	return -E_INVAL;
+	}
+	e->env_ipc_recving = 0;
+	e->env_ipc_from = src_e->env_id;
+	e->env_ipc_value = value;
+	e->env_ipc_perm = perm;
+	e->env_status = ENV_RUNNING;
+	return 0;
 }
 
 // Block until a value is ready.  Record that you want to receive
