@@ -55,9 +55,7 @@ TRAPHANDLER(HANDLER_GPFLT, T_GPFLT)
 TRAPHANDLER(HANDLER_PGFLT, T_PGFLT)
 TRAPHANDLER_NOEC(HANDLER_BRKPT, T_BRKPT)
 
-
-
-
+TRAPHANDLER_NOEC(HANDLER_IRQ_TIMER, IRQ_OFFSET + IRQ_TIMER)
 
 /*
  * Lab 3: Your code here for _alltraps
@@ -65,6 +63,7 @@ TRAPHANDLER_NOEC(HANDLER_BRKPT, T_BRKPT)
         .globl _alltraps;
         .type _alltraps, @function;
 	_alltraps:
+	cli
 	pushl %ds
 	pushl %es
 	pushal

@@ -71,6 +71,8 @@ void HANDLER_GPFLT();
 void HANDLER_PGFLT();
 void HANDLER_BRKPT();
 
+void HANDLER_IRQ_TIMER();
+
 
 void
 trap_init(void)
@@ -91,6 +93,10 @@ trap_init(void)
         idt[T_PGFLT] = desc;
         SETGATE(desc, 0, GD_KT, (void *)HANDLER_BRKPT, 3);
         idt[T_BRKPT] = desc;
+
+	/* IRQs */
+	SETGATE(desc, 0, GD_KT, (void *)HANDLER_IRQ_TIMER, 3);
+	idt[IRQ_OFFSET + IRQ_TIMER] = desc;
 
 
 	// Per-CPU setup 
@@ -126,7 +132,7 @@ trap_init_percpu(void)
 
 	// Setup a TSS so that we get the right stack
 	// when we trap to the kernel.
-	thiscpu->cpu_ts.ts_esp0 = KSTACKTOP;
+	thiscpu->cpu_ts.ts_esp0 = KSTACKTOP - (thiscpu->cpu_id) * (KSTKSIZE + KSTKGAP);
 	thiscpu->cpu_ts.ts_ss0 = GD_KD;
 
 	// Initialize the TSS slot of the gdt.
@@ -221,7 +227,10 @@ trap_dispatch(struct Trapframe *tf)
 	// Handle clock interrupts. Don't forget to acknowledge the
 	// interrupt using lapic_eoi() before calling the scheduler!
 	// LAB 4: Your code here.
-
+	if (tf->tf_trapno == IRQ_OFFSET + IRQ_TIMER) {
+		lapic_eoi();
+		sched_yield();
+	}
 	// Unexpected trap: The user process or the kernel has a bug.
 	print_trapframe(tf);
 	if (tf->tf_cs == GD_KT)
@@ -253,7 +262,7 @@ trap(struct Trapframe *tf)
 	// the interrupt path.
 	assert(!(read_eflags() & FL_IF));
 
-//	cprintf("Incoming TRAP frame at %p\n", tf);
+	//cprintf("Incoming TRAP frame at %p\n", tf);
 
 	if ((tf->tf_cs & 3) == 3) {
 		// Trapped from user mode.
