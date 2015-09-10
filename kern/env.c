@@ -533,10 +533,12 @@ env_run(struct Env *e)
 	// LAB 3: Your code here.
 	//cprintf("Cunning env %lx\n", e->env_id);
 	if (curenv) {
-		if (curenv->env_status == ENV_RUNNING)
+		if (curenv->env_status == ENV_RUNNING) {
 			curenv->env_status = ENV_RUNNABLE;
-		else {
-			panic("Curenv wasn't in RUNNING state, state %d\n",
+		} else if (curenv->env_status == ENV_NOT_RUNNABLE) {
+			/* If env is in Not runable state, just leave it */
+		} else {
+			panic("Curenv in unhandled state %d, while context switch\n",
 				curenv->env_status);
 		}
 	}

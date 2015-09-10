@@ -11,6 +11,7 @@ void sched_halt(void);
 
 void round_robin_run(struct Env *e, int idx)
 {
+	//cprintf("running %lx s: %d\n", e->env_id, e->env_status);
 	if (e->env_status == ENV_RUNNABLE) {
 		lastrunenv = idx + 1;
 		env_run(e);
