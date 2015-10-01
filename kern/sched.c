@@ -8,6 +8,16 @@
 void sched_halt(void);
 
 // Choose a user environment to run and run it.
+
+void round_robin_run(struct Env *e, int idx)
+{
+	//cprintf("running %lx s: %d\n", e->env_id, e->env_status);
+	if (e->env_status == ENV_RUNNABLE) {
+		lastrunenv = idx + 1;
+		env_run(e);
+	}
+}
+
 void
 sched_yield(void)
 {
@@ -29,9 +39,17 @@ sched_yield(void)
 	// below to halt the cpu.
 
 	// LAB 4: Your code here.
-
-	// sched_halt never returns
+	int i;
+	for (i = lastrunenv; i < NENV; i++) {
+		round_robin_run(&envs[i], i);
+	}
+	for (i = 0; i < lastrunenv; i++) {
+		round_robin_run(&envs[i], i);
+	}
+	if (curenv && curenv->env_status == ENV_RUNNING)
+ 		env_run(curenv);
 	sched_halt();
+	monitor(NULL);
 }
 
 // Halt this CPU when there is nothing to do. Wait until the
