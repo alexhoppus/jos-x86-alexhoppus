@@ -18,7 +18,6 @@ bc_pgfault(struct UTrapframe *utf)
 	void *addr = (void *) utf->utf_fault_va;
 	uint32_t blockno = ((uint32_t)addr - DISKMAP) / BLKSIZE;
 	int r;
-
 	// Check that the fault was within the block cache region
 	if (addr < (void*)DISKMAP || addr >= (void*)(DISKMAP + DISKSIZE))
 		panic("page fault in FS: eip %08x, va %08x, err %04x",
@@ -33,7 +32,10 @@ bc_pgfault(struct UTrapframe *utf)
 	// Hint: first round addr to page boundary.
 	//
 	// LAB 5: you code here:
-
+	if ((r = sys_page_alloc(0, ROUNDDOWN(addr, PGSIZE), PTE_P|PTE_U|PTE_W)) < 0)
+		panic("sys_page_alloc: %e", r);
+	if ((r = ide_read(blockno * 8, (void *)ROUNDDOWN(addr, PGSIZE), 8)) < 0)
+		panic("ide_read: %e", r);
 }
 
 

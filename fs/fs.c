@@ -70,7 +70,11 @@ file_block_walk(struct File *f, uint32_t filebno, uint32_t **ppdiskbno, bool all
 		ptr = &f->f_direct[filebno];
 	else if (filebno < NDIRECT + NINDIRECT) {
 		if (f->f_indirect == 0) {
-			return -E_NOT_FOUND;
+			if (!alloc)
+				return -E_NOT_FOUND;
+			f->f_indirect = alloc_block();
+			if (f->f_indirect == -1)
+				return -E_NO_DISK;
 		}
 		ptr = (uint32_t*)diskaddr(f->f_indirect) + filebno - NDIRECT;
 	} else

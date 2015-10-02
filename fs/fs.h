@@ -40,8 +40,20 @@ int	file_remove(const char *path);
 void	fs_sync(void);
 
 /* int	map_block(uint32_t); */
-bool	block_is_free(uint32_t blockno);
-int	alloc_block(void);
+static inline bool block_is_free(uint32_t blockno)
+{
+	char *bmap = (char *)bitmap;
+	return (bool)(bmap[blockno / 8] & (1 << blockno % 8));
+}
+static inline int alloc_block(void)
+{
+	int i = 0;
+	for (; i < BLKSIZE; i++) {
+		if (block_is_free(i))
+			return i;
+	}
+	return -1;
+}
 
 /* test.c */
 void	fs_test(void);
