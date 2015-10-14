@@ -34,11 +34,5 @@ void
 umain(int argc, char **argv)
 {
 	forktree("");
-	/*if (fork() == 0) {
-		cprintf("Iam child\n");
-	} else {
-		cprintf("Iam parent\n");
-	}*/
-	
 }
 

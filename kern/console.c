@@ -373,7 +373,7 @@ kbd_intr(void)
 static void
 kbd_init(void)
 {
-	// Drain the kbd buffer so that Bochs generates interrupts.
+	// Drain the kbd buffer so that QEMU generates interrupts.
 	kbd_intr();
 	irq_setmask_8259A(irq_mask_8259A & ~(1<<1));
 }

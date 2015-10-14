@@ -17,6 +17,7 @@ uint32_t *bitmap;		// bitmap blocks mapped in memory
 /* ide.c */
 bool	ide_probe_disk1(void);
 void	ide_set_disk(int diskno);
+void	ide_set_partition(uint32_t first_sect, uint32_t nsect);
 int	ide_read(uint32_t secno, void *dst, size_t nsecs);
 int	ide_write(uint32_t secno, const void *src, size_t nsecs);
 
@@ -40,20 +41,8 @@ int	file_remove(const char *path);
 void	fs_sync(void);
 
 /* int	map_block(uint32_t); */
-static inline bool block_is_free(uint32_t blockno)
-{
-	char *bmap = (char *)bitmap;
-	return (bool)(bmap[blockno / 8] & (1 << blockno % 8));
-}
-static inline int alloc_block(void)
-{
-	int i = 0;
-	for (; i < BLKSIZE; i++) {
-		if (block_is_free(i))
-			return i;
-	}
-	return -1;
-}
+bool	block_is_free(uint32_t blockno);
+int	alloc_block(void);
 
 /* test.c */
 void	fs_test(void);
