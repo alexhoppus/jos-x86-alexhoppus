@@ -48,7 +48,15 @@ bc_pgfault(struct UTrapframe *utf)
 	// the disk.
 	//
 	// LAB 5: you code here:
+	if ((r = sys_page_alloc(0, ROUNDDOWN(addr, PGSIZE), PTE_SYSCALL)) < 0)
+		panic("page alloc %e", r);
 
+	if ((r = ide_read(blockno * 8, ROUNDDOWN(addr, PGSIZE), 8)) < 0)
+		panic("ide_read %e", r);
+	cprintf("Copying sector %d to addr %lx\n", blockno * 8, ROUNDDOWN(addr, PGSIZE));
+	//int i = 0;
+	//for (; i < 100; i++)
+	//	cprintf("%d %lx\n", i, ((unsigned long *)addr)[i]);
 	// Clear the dirty bit for the disk block page since we just read the
 	// block from disk
 	if ((r = sys_page_map(0, addr, 0, addr, uvpt[PGNUM(addr)] & PTE_SYSCALL)) < 0)
@@ -71,13 +79,18 @@ bc_pgfault(struct UTrapframe *utf)
 void
 flush_block(void *addr)
 {
-	uint32_t blockno = ((uint32_t)addr - DISKMAP) / BLKSIZE;
+	int r = 0;
+	uint32_t blockno = ((uint32_t)addr - DISKMAP) / 512;
 
 	if (addr < (void*)DISKMAP || addr >= (void*)(DISKMAP + DISKSIZE))
 		panic("flush_block of bad va %08x", addr);
-
 	// LAB 5: Your code here.
-	panic("flush_block not implemented");
+	if (!va_is_mapped(addr) || !va_is_dirty(addr))
+		return;
+	 if ((r = ide_write(blockno, ROUNDDOWN(addr, PGSIZE), 8)) < 0)
+                panic("ide_read %e", r);
+        if ((r = sys_page_map(0, addr, 0, addr, uvpt[PGNUM(addr)] & PTE_SYSCALL)) < 0)
+                panic("in bc_pgfault, sys_page_map: %e", r);
 }
 
 // Test that the block cache works, by smashing the superblock and
@@ -89,7 +102,7 @@ check_bc(void)
 
 	// back up super block
 	memmove(&backup, diskaddr(1), sizeof backup);
-
+	cprintf("backup magic %lx\n", backup.s_magic);
 	// smash it
 	strcpy(diskaddr(1), "OOPS!\n");
 	flush_block(diskaddr(1));

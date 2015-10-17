@@ -12,7 +12,8 @@ void
 check_super(void)
 {
 	if (super->s_magic != FS_MAGIC)
-		panic("bad file system magic number");
+		panic("bad file system magic number,\n should be %x, given %x\n",
+			FS_MAGIC, super->s_magic);
 
 	if (super->s_nblocks > DISKSIZE/BLKSIZE)
 		panic("file system is too large");
@@ -46,6 +47,17 @@ free_block(uint32_t blockno)
 	bitmap[blockno/32] |= 1<<(blockno%32);
 }
 
+// Mark a block not free in the bitmap
+void
+fill_block(uint32_t blockno)
+{
+        // Blockno zero is the null pointer of block numbers.
+        if (blockno == 0)
+                panic("attempt to free zero block");
+        bitmap[blockno/32] &= ~(1<<(blockno%32));
+}
+
+
 // Search the bitmap for a free block and allocate it.  When you
 // allocate a block, immediately flush the changed bitmap block
 // to disk.
@@ -62,7 +74,15 @@ alloc_block(void)
 	// super->s_nblocks blocks in the disk altogether.
 
 	// LAB 5: Your code here.
-	panic("alloc_block not implemented");
+	int i = 0;
+	for (; i < super->s_nblocks; i++) {
+		if (block_is_free(i)) {
+			fill_block(i);
+			flush_block(bitmap);
+			return i;
+		}
+			
+	}
 	return -E_NO_DISK;
 }
 
@@ -134,8 +154,28 @@ fs_init(void)
 static int
 file_block_walk(struct File *f, uint32_t filebno, uint32_t **ppdiskbno, bool alloc)
 {
-       // LAB 5: Your code here.
-       panic("file_block_walk not implemented");
+	// LAB 5: Your code here.
+	if (filebno >= NDIRECT + NINDIRECT || filebno < 0) {
+		return -E_INVAL;
+	}
+
+	if (filebno < NDIRECT) {
+		*ppdiskbno = f->f_direct[filebno];
+	} else {
+		uint32_t und_filebno = filebno - NDIRECT;
+		if (!f->f_indirect) {
+			if (alloc) {
+				// Alloc indirect block
+				f->f_indirect = alloc_block();
+				if (f->f_indirect < 0)
+					return -E_NO_DISK;
+ 			} else
+ 				return -E_NOT_FOUND;
+		}
+		uint32_t *ind_addr = (uint32_t *)(f->f_indirect * BLKSIZE + DISKMAP);
+		*ppdiskbno = ind_addr[und_filebno];
+		return 0;
+	}
 }
 
 // Set *blk to the address in memory where the filebno'th
@@ -150,7 +190,18 @@ int
 file_get_block(struct File *f, uint32_t filebno, char **blk)
 {
        // LAB 5: Your code here.
-       panic("file_get_block not implemented");
+	int r = 0;
+	uint32_t *ppdiskbno;
+	if ((r = file_block_walk(f, filebno, &ppdiskbno, 1)) < 0)
+		return r;
+
+	if (*ppdiskbno) {
+		// Block found
+		*blk = (char *)(*ppdiskbno * BLKSIZE + DISKMAP);
+	} else {
+		
+	}
+	return 0;
 }
 
 // Try to find a file named "name" in dir.  If so, set *file to it.
